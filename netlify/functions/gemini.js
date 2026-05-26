@@ -12,19 +12,27 @@ exports.handler = async (event) => {
   try {
     const { message, system } = JSON.parse(event.body);
     const apiKey = process.env.GEMINI_API_KEY;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+    const prompt = system ? `${system}\n\n${message}` : message;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: system || 'ענה בעברית קצרה וידידותית.' }] },
-        contents: [{ parts: [{ text: message }] }]
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 1000 }
       })
     });
 
     const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    console.log('Gemini response:', JSON.stringify(data));
+
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!text) {
+      return { statusCode: 200, headers, body: JSON.stringify({ text: 'שגיאה: תגובה ריקה', debug: data }) };
+    }
+
     return { statusCode: 200, headers, body: JSON.stringify({ text }) };
 
   } catch (err) {
