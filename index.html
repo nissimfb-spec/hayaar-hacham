@@ -583,7 +583,30 @@ async function identifySpeciesWithAI() {
   const desc = document.getElementById('ai-desc-input').value.trim();
   const btn = document.getElementById('btn-identify-ai');
   const status = document.getElementById('ai-identify-status');
-  if (!desc) { openModal("חסר תיאור","כתבו תיאור של מה שראיתם — צבע, צורה, גודל, התנהגות.","fa-keyboard","bg-amber-100","text-amber-600"); return; }
+  if (!desc) { openModal("חסר תיאור","כתבו תיאור של מה שראיתם.","fa-keyboard","bg-amber-100","text-amber-600"); return; }
+  btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> מזהה...`;
+  status.classList.remove('hidden');
+  try {
+    const raw = await callClaude(
+      `ביער הר אדר ראיתי: "${desc}"\n\nזהה את המין וענה בפורמט הזה בדיוק (JSON בלבד, בלי שום טקסט אחר):\n{"species":"שם המין בעברית","explanation":"הסבר קצר 2 משפטים","category":"bird"}\n\nהערכים האפשריים ל-category: bird, butterfly, flower, invasive`,
+      `אתה מומחה ביולוגיה ישראלי. ענה תמיד ב-JSON בלבד. אין טקסט לפני או אחרי ה-JSON.`
+    );
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start === -1 || end === -1) throw new Error("לא התקבל JSON");
+    const result = JSON.parse(raw.slice(start, end + 1));
+    document.getElementById('obs-species').value = result.species || '';
+    document.getElementById('obs-notes').value = result.explanation || '';
+    const validCat = ['bird','butterfly','flower','invasive'].includes(result.category) ? result.category : 'bird';
+    selectCategory(validCat);
+    openModal("זיהוי הושלם! ✨",`זוהה: "${result.species}". הטופס מולא אוטומטית!`,"fa-wand-magic-sparkles","bg-teal-100","text-teal-700");
+  } catch(e) {
+    openModal("שגיאת זיהוי",`נסו תיאור מפורט יותר. (${e.message})`,"fa-circle-exclamation","bg-red-100","text-red-600");
+  } finally {
+    btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> <span>זהה!</span>`;
+    status.classList.add('hidden');
+  }
+}
   btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> מזהה...`;
   status.classList.remove('hidden');
   try {
