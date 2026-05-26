@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>היער החכם - הר אדר</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;800;900&family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+tailwind.config = {
+  theme: { extend: {
+    fontFamily: { sans: ['Heebo','Assistant','sans-serif'] },
+    colors: { forest: { 50:'#f0f7f2',100:'#dceee2',200:'#bbe0c7',300:'#8bcba6',400:'#58b07f',500:'#359660',600:'#277a4c',700:'#1f6040',800:'#1a4d33',900:'#143f2a' } }
+  }}
+}
+</script>
+<style>
+*{-webkit-font-smoothing:antialiased}
+body{background:#f0f7f2}
+.custom-scroll::-webkit-scrollbar{width:5px}
+.custom-scroll::-webkit-scrollbar-track{background:#f1f1f1}
+.custom-scroll::-webkit-scrollbar-thumb{background:#9ccaab;border-radius:3px}
+@keyframes pulse-soft{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.04);opacity:.95}}
+.pulse-btn{animation:pulse-soft 3s infinite ease-in-out}
+@keyframes pulse-ring{0%{transform:scale(.95);opacity:1}100%{transform:scale(1.5);opacity:0}}
+.hotspot-ring{animation:pulse-ring 1.8s infinite ease-out}
+@keyframes float-up{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:translateY(0)}}
+.float-up{animation:float-up .4s ease forwards}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+.shimmer-text{background:linear-gradient(90deg,#277a4c 40%,#c8973a 50%,#277a4c 60%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shimmer 3s linear infinite}
+.tab-btn.active{background:#143f2a;color:#fff}
+.tab-btn.active i{color:#fff}
+.scroll-hide::-webkit-scrollbar{display:none}
+.scroll-hide{-ms-overflow-style:none;scrollbar-width:none}
+.leaflet-popup-content{text-align:right;direction:rtl;font-family:'Heebo',sans-serif}
+.station-card{transition:all .25s ease}
+.station-card:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(39,122,76,.15)}
+input[type=range]{accent-color:#277a4c}
+select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23277a4c' d='M6 8L0 0h12z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:left 12px center;padding-left:32px!important}
+</style>
+</head>
+<body class="font-sans min-h-screen text-slate-800 flex flex-col antialiased">
+
+<!-- Header -->
+<header class="bg-white/90 backdrop-blur-md border-b border-forest-100 sticky top-0 z-50">
+  <div class="max-w-2xl mx-auto px-4 py-3 flex justify-between items-center">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-forest-600 to-forest-800 flex items-center justify-center text-white shadow-md"><i class="fa-solid fa-tree text-base"></i></div>
+      <div>
+        <h1 class="font-black text-lg text-forest-900 leading-tight shimmer-text">היער החכם</h1>
+        <span class="text-[10px] text-forest-600 font-bold block tracking-wide uppercase">הר אדר • מדע אזרחי ו-AI</span>
+      </div>
+    </div>
+    <button onclick="switchTab('ai-guide')" class="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-l from-forest-700 to-emerald-600 text-white rounded-xl text-xs font-bold hover:opacity-90 transition-all shadow-md">
+      <i class="fa-solid fa-sparkles"></i><span>שאל את היער</span>
+    </button>
+  </div>
+</header>
+
+<!-- Main -->
+<main class="flex-grow max-w-2xl w-full mx-auto px-4 py-4 flex flex-col gap-4 pb-28">
+
+  <!-- API Key Banner (shown when no key configured) -->
+  <div id="api-key-banner" class="hidden bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col gap-2">
+    <div class="flex items-center gap-2 text-amber-800 font-bold text-sm">
+      <i class="fa-solid fa-key text-amber-600"></i>
+      <span>נדרש Anthropic API Key לפעולת ה-AI</span>
+    </div>
+    <p class="text-xs text-amber-700 leading-relaxed">כדי שעוזר הזיהוי, הצ'אט והקריינות יעבדו, הזינו את מפתח ה-API שלכם:</p>
+    <div class="flex gap-2">
+      <input type="password" id="api-key-input" placeholder="sk-ant-api03-..." class="flex-grow bg-white border border-amber-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-amber-500 font-mono">
+      <button onclick="saveApiKey()" class="px-4 py-2 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 transition-all flex-shrink-0">שמור</button>
+    </div>
+    <p class="text-[10px] text-amber-600">🔒 המפתח נשמר רק בדפדפן שלכם (sessionStorage). <a href="https://console.anthropic.com" target="_blank" class="underline">לקבלת מפתח API</a></p>
+  </div>
+
+  <nav class="bg-white p-1.5 rounded-2xl shadow-sm border border-forest-100 flex justify-between text-xs font-bold overflow-x-auto scroll-hide gap-1">
+    <button onclick="switchTab('map')" id="tab-map" class="tab-btn active flex-shrink-0 py-2 px-3 rounded-xl transition-all flex flex-col items-center gap-1 min-w-[52px]"><i class="fa-solid fa-map-location-dot text-base"></i><span>מפה</span></button>
+    <button onclick="switchTab('station1')" id="tab-station1" class="tab-btn flex-shrink-0 py-2 px-3 rounded-xl text-slate-500 hover:text-forest-700 transition-all flex flex-col items-center gap-1 min-w-[52px]"><i class="fa-solid fa-ruler-horizontal text-base"></i><span>עצים</span></button>
+    <button onclick="switchTab('station2')" id="tab-station2" class="tab-btn flex-shrink-0 py-2 px-3 rounded-xl text-slate-500 hover:text-forest-700 transition-all flex flex-col items-center gap-1 min-w-[52px]"><i class="fa-solid fa-binoculars text-base"></i><span>מדע</span></button>
+    <button onclick="switchTab('interactive-video')" id="tab-interactive-video" class="tab-btn flex-shrink-0 py-2 px-3 rounded-xl text-slate-500 hover:text-forest-700 transition-all flex flex-col items-center gap-1 min-w-[52px]"><i class="fa-solid fa-circle-play text-base"></i><span>וידאו</span></button>
+    <button onclick="switchTab('station3')" id="tab-station3" class="tab-btn flex-shrink-0 py-2 px-3 rounded-xl text-slate-500 hover:text-forest-700 transition-all flex flex-col items-center gap-1 min-w-[52px]"><i class="fa-solid fa-book-open-reader text-base"></i><span>סיפור</span></button>
+  </nav>
+
+  <!-- MAP -->
+  <section id="sec-map" class="tab-section flex flex-col gap-4">
+    <div class="bg-gradient-to-br from-forest-800 to-emerald-950 rounded-2xl p-5 text-white shadow-xl relative overflow-hidden">
+      <div class="absolute left-0 bottom-0 opacity-10"><i class="fa-solid fa-tree text-[120px] -translate-x-4 translate-y-4"></i></div>
+      <span class="bg-white/15 text-white text-[10px] font-bold px-2.5 py-1 rounded-full border border-white/20 inline-flex items-center gap-1 mb-3"><i class="fa-solid fa-location-dot text-yellow-300"></i> יער הר אדר</span>
+      <h2 class="text-2xl font-black mb-2">ברוכים הבאים ליער החכם!</h2>
+      <p class="text-sm text-forest-100/90 leading-relaxed">הסביבה הטבעית של הר אדר הופכת למעבדת חקר דיגיטלית. סרקו QR לאורך המסלול או חקרו כאן עם בינה מלאכותית.</p>
+    </div>
+    <div class="bg-white rounded-2xl p-4 border border-forest-100 shadow-sm">
+      <h3 class="font-bold text-slate-800 text-sm flex items-center gap-1.5 mb-2"><i class="fa-solid fa-map-location-dot text-forest-600"></i><span>מפה חיה — מסלולי יער הר אדר</span></h3>
+      <div id="leafletMap" class="w-full h-72 rounded-xl border border-slate-200 shadow-inner z-10"></div>
+      <span class="text-[10px] text-slate-400 text-center block mt-2">לחצו על הסיכות כדי לנווט לתחנות</span>
+    </div>
+    <h3 class="font-bold text-slate-800 text-base flex items-center gap-2"><i class="fa-solid fa-route text-forest-600"></i><span>תחנות לאורך מסלול היער</span></h3>
+    <div onclick="switchTab('station1')" class="station-card bg-white rounded-2xl p-4 border border-forest-100 shadow-sm cursor-pointer flex items-start gap-4">
+      <div class="w-12 h-12 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 flex-shrink-0 text-xl font-black">א</div>
+      <div class="flex-grow"><div class="flex items-center justify-between mb-1"><h4 class="font-bold text-slate-800">תחנת העצים — גלו את גילם</h4><span class="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded-lg">מתמטיקה & AI</span></div><p class="text-xs text-slate-500 mb-2">20+ מינים ישראליים! מדדו היקף גזע וגלו גיל, ספיחת פחמן וייצור חמצן.</p><span class="text-xs text-forest-600 font-semibold flex items-center gap-1">להתחלת הפעילות <i class="fa-solid fa-arrow-left text-[10px]"></i></span></div>
+    </div>
+    <div onclick="switchTab('station2')" class="station-card bg-white rounded-2xl p-4 border border-forest-100 shadow-sm cursor-pointer flex items-start gap-4">
+      <div class="w-12 h-12 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 flex-shrink-0 text-xl font-black">ב</div>
+      <div class="flex-grow"><div class="flex items-center justify-between mb-1"><h4 class="font-bold text-slate-800">מדע אזרחי ושימור</h4><span class="text-[9px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded-lg">שיתופי & AI</span></div><p class="text-xs text-slate-500 mb-2">תארו מה ראיתם — Claude AI יזהה ציפורים, פרפרים וצמחים!</p><span class="text-xs text-forest-600 font-semibold flex items-center gap-1">להתחלת הפעילות <i class="fa-solid fa-arrow-left text-[10px]"></i></span></div>
+    </div>
+    <div onclick="switchTab('interactive-video')" class="station-card bg-white rounded-2xl p-4 border border-forest-100 shadow-sm cursor-pointer flex items-start gap-4">
+      <div class="w-12 h-12 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-600 flex-shrink-0 text-xl"><i class="fa-solid fa-circle-play"></i></div>
+      <div class="flex-grow"><div class="flex items-center justify-between mb-1"><h4 class="font-bold text-slate-800">סיור רחפן אינטראקטיבי</h4><span class="text-[9px] bg-teal-100 text-teal-800 font-bold px-1.5 py-0.5 rounded-lg">מולטימדיה & AI</span></div><p class="text-xs text-slate-500 mb-2">טוסו מעל הר אדר עם קריינות AI חיה ופתרו חידות מדעיות!</p><span class="text-xs text-forest-600 font-semibold flex items-center gap-1">להתחלת הסיור <i class="fa-solid fa-arrow-left text-[10px]"></i></span></div>
+    </div>
+    <div onclick="switchTab('station3')" class="station-card bg-white rounded-2xl p-4 border border-forest-100 shadow-sm cursor-pointer flex items-start gap-4">
+      <div class="w-12 h-12 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-600 flex-shrink-0 text-xl font-black">ג</div>
+      <div class="flex-grow"><div class="flex items-center justify-between mb-1"><h4 class="font-bold text-slate-800">מסעו של הזרע — סיפור AI</h4><span class="text-[9px] bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded-lg">לכל המשפחה</span></div><p class="text-xs text-slate-500 mb-2">סיפור אינטראקטיבי משתנה לפי ההחלטות שלכם — האם הזרע ישרוד?</p><span class="text-xs text-forest-600 font-semibold flex items-center gap-1">להתחלת הפעילות <i class="fa-solid fa-arrow-left text-[10px]"></i></span></div>
+    </div>
+    <div class="bg-forest-100/60 border border-forest-200 rounded-2xl p-4 flex items-center gap-3">
+      <i class="fa-solid fa-qrcode text-2xl text-forest-700 flex-shrink-0"></i>
+      <div class="text-xs text-forest-800 leading-relaxed"><strong>נמצאים בשטח?</strong> חפשו שלטי נייר על העצים וסרקו QR לפתיחה ישירה!</div>
+    </div>
+  </section>
+
+  <!-- STATION 1 — TREES -->
+  <section id="sec-station1" class="tab-section hidden flex flex-col gap-4">
+    <div class="bg-white rounded-2xl p-5 border border-forest-100 shadow-sm">
+      <div class="flex items-center gap-2 text-amber-700 mb-3"><i class="fa-solid fa-tree-deciduous text-xl"></i><h3 class="font-black text-lg">תחנת העצים: מדדו והעריכו</h3></div>
+      <p class="text-xs text-slate-500 leading-relaxed mb-4">מדדו היקף גזע בגובה 1.3 מטר (גובה החזה) — ונחשב יחד גיל העץ ותרומתו האקולוגית.</p>
+      <div class="space-y-4 bg-forest-50 p-4 rounded-xl border border-forest-100">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1.5">1. בחרו את סוג העץ:</label>
+          <select id="tree-type" onchange="calculateTreeData()" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-forest-500 font-medium">
+            <optgroup label="עצי יערות נטועים">
+              <option value="pine">🌲 אורן ירושלים (קצב מהיר)</option>
+              <option value="cypress">🌲 ברוש מצוי (קצב מהיר)</option>
+              <option value="eucalyptus">🌿 אקליפטוס (קצב מהיר מאוד)</option>
+            </optgroup>
+            <optgroup label="עצי חורש טבעי">
+              <option value="oak">🌳 אלון מצוי (קצב איטי)</option>
+              <option value="terebinth">🌿 אלה ארצישראלית (קצב בינוני)</option>
+              <option value="carob">🍫 חרוב מצוי (קצב איטי)</option>
+              <option value="lentisk">🌿 לענה (קצב איטי)</option>
+              <option value="strawberry">🍓 קטלב מצוי (קצב בינוני)</option>
+            </optgroup>
+            <optgroup label="עצי פרי ישראליים">
+              <option value="olive">🫒 זית אירופי (קצב איטי מאוד)</option>
+              <option value="almond">🌸 שקד (קצב בינוני)</option>
+              <option value="fig">🌿 תאנה (קצב בינוני)</option>
+              <option value="pomegranate">🌺 רימון (קצב איטי)</option>
+              <option value="pistachio">🌿 פיסטוק אטלנטי (קצב איטי)</option>
+            </optgroup>
+            <optgroup label="עצי עמק ונחל">
+              <option value="tamarisk">🌿 אתל (קצב מהיר)</option>
+              <option value="poplar">🌿 צפצפה לבנה (קצב מהיר)</option>
+              <option value="willow">🌿 ערבה בבלית (קצב מהיר)</option>
+              <option value="sycamore">🌳 שקמה (קצב בינוני)</option>
+            </optgroup>
+            <optgroup label="עצים נוספים">
+              <option value="acacia">🌿 שיטה (קצב מהיר)</option>
+              <option value="redbud">🌸 כליל החורש (קצב בינוני)</option>
+              <option value="judas">🌸 עץ יהודה (קצב בינוני)</option>
+              <option value="bay">🍃 ערמון (קצב בינוני)</option>
+            </optgroup>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1.5">2. הזינו היקף גזע (בסנטימטרים):</label>
+          <div class="flex items-center gap-3">
+            <input type="range" id="tree-circumference-slider" min="5" max="500" value="80" oninput="syncCircumference('slider')" class="flex-grow h-2 rounded-lg cursor-pointer">
+            <div class="relative w-24 flex-shrink-0">
+              <input type="number" id="tree-circumference" value="80" min="5" max="500" oninput="syncCircumference('input')" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-forest-500 font-bold text-center">
+              <span class="absolute left-2 top-2 text-[10px] text-slate-400 font-bold">ס"מ</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mt-3 text-[11px] text-slate-500 bg-amber-50 p-3 rounded-xl border border-amber-100">
+        <span class="font-bold text-slate-700 block mb-1">📐 החשיבה המתמטית:</span>
+        קוטר = היקף ÷ π (3.1416) | גיל ≈ קוטר × מקדם צמיחה ייחודי למין
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl p-5 border border-forest-100 shadow-sm flex flex-col gap-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h4 class="font-bold text-slate-800">תוצאות ניתוח אקולוגי</h4>
+        <span id="tree-type-badge" class="text-[10px] bg-forest-100 text-forest-800 font-bold px-2 py-0.5 rounded-lg">אורן ירושלים</span>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="bg-amber-50 p-3.5 rounded-2xl border border-amber-100 text-center"><span class="text-[10px] text-amber-700 font-bold block mb-1">🎂 גיל עץ משוער</span><span id="res-age" class="text-3xl font-black text-amber-700">48</span><span class="text-xs text-amber-600 block mt-0.5">שנים</span></div>
+        <div class="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-100 text-center"><span class="text-[10px] text-emerald-700 font-bold block mb-1">🌫️ ספיחת CO₂</span><span id="res-co2" class="text-3xl font-black text-emerald-700">1.2</span><span class="text-xs text-emerald-600 block mt-0.5">טון מצטבר</span></div>
+        <div class="bg-sky-50 p-3.5 rounded-2xl border border-sky-100 text-center"><span class="text-[10px] text-sky-700 font-bold block mb-1">💨 O₂ שנתי</span><span id="res-o2" class="text-3xl font-black text-sky-700">110</span><span class="text-xs text-sky-600 block mt-0.5">ק"ג לשנה</span></div>
+        <div class="bg-stone-50 p-3.5 rounded-2xl border border-stone-100 text-center"><span class="text-[10px] text-stone-700 font-bold block mb-1">📏 קוטר גזע</span><span id="res-diameter" class="text-3xl font-black text-stone-700">25.5</span><span class="text-xs text-stone-600 block mt-0.5">ס"מ</span></div>
+      </div>
+      <div id="tree-fun-fact" class="bg-forest-50 border border-forest-100 rounded-xl p-3 text-xs text-forest-900 leading-relaxed"></div>
+      <div class="border border-amber-100 rounded-2xl p-4 bg-amber-50/30 flex flex-col items-center">
+        <span class="text-xs font-bold text-slate-600 mb-3">🪵 הדמיית טבעות צמיחה שנתית:</span>
+        <canvas id="treeRingCanvas" width="200" height="200" class="rounded-full shadow-inner"></canvas>
+        <span class="text-[10px] text-slate-400 mt-2 text-center">כל טבעת = שנה | טבעות כהות = שנות בצורת</span>
+      </div>
+      <div class="bg-forest-50 p-4 rounded-2xl border border-forest-100 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1.5 text-forest-700 font-bold text-xs"><i class="fa-solid fa-sparkles text-teal-500"></i><span>תובנת אקולוגיה — Claude AI:</span></div>
+          <span class="text-[9px] bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded-lg font-extrabold">LIVE AI</span>
+        </div>
+        <p id="ai-ecological-insight" class="text-xs text-slate-500 leading-relaxed italic">לחצו על הכפתור לקבלת תובנה ייחודית לעץ שלכם...</p>
+        <button onclick="generateCustomTreeInsight()" id="btn-tree-ai" class="w-full py-2.5 bg-gradient-to-l from-teal-600 to-forest-600 text-white rounded-xl text-xs font-bold hover:opacity-95 transition-all flex items-center justify-center gap-2">
+          <i class="fa-solid fa-sparkles"></i><span>חולל תובנה אקולוגית ייחודית ✨</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATION 2 — CITIZEN SCIENCE -->
+  <section id="sec-station2" class="tab-section hidden flex flex-col gap-4">
+    <div class="bg-white rounded-2xl p-5 border border-forest-100 shadow-sm">
+      <div class="flex items-center gap-2 text-blue-600 mb-2"><i class="fa-solid fa-binoculars text-xl"></i><h3 class="font-black text-lg">מדע אזרחי: תעדו את היער</h3></div>
+      <p class="text-xs text-slate-500 leading-relaxed">כשאתם מדווחים על מיני החי והצומח, אתם הופכים למדענים! הנתונים תורמים לחקר המגוון הביולוגי.</p>
+    </div>
+    <div class="bg-white rounded-2xl p-5 border border-forest-100 shadow-sm">
+      <h4 class="font-bold text-slate-800 text-sm border-b border-slate-100 pb-2 mb-4">דווחו על תצפית חדשה</h4>
+      <div class="bg-gradient-to-br from-teal-50 to-blue-50 border border-teal-200 rounded-2xl p-4 mb-4 flex flex-col gap-3">
+        <div class="flex items-center gap-2 text-teal-800 font-bold text-sm">
+          <div class="w-7 h-7 rounded-lg bg-teal-600 text-white flex items-center justify-center text-xs flex-shrink-0"><i class="fa-solid fa-sparkles"></i></div>
+          <span>עוזר זיהוי AI מבוסס Claude</span>
+          <span class="mr-auto text-[9px] bg-teal-600 text-white px-2 py-0.5 rounded-full font-bold">פועל!</span>
+        </div>
+        <p class="text-[11px] text-slate-600 leading-relaxed">תארו בחופשיות מה אתם רואים — צבע, צורה, התנהגות — וה-AI יזהה ויזין את הטופס אוטומטית!</p>
+        <div class="flex gap-2">
+          <input type="text" id="ai-desc-input" placeholder='למשל: "ציפור שחורה עם בטן צהובה"...' class="flex-grow bg-white border border-teal-200 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-teal-500 shadow-sm">
+          <button type="button" onclick="identifySpeciesWithAI()" id="btn-identify-ai" class="px-4 py-2 bg-teal-600 text-white rounded-xl text-xs font-bold hover:bg-teal-700 transition-all flex items-center gap-1.5 shadow-sm flex-shrink-0">
+            <i class="fa-solid fa-wand-magic-sparkles"></i><span>זהה!</span>
+          </button>
+        </div>
+        <div id="ai-identify-status" class="hidden text-xs text-teal-700 flex items-center gap-2"><i class="fa-solid fa-spinner animate-spin"></i> <span>Claude מזהה את הממצא שלך...</span></div>
+      </div>
+      <form id="observation-form" onsubmit="handleObservationSubmit(event)" class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-2">סוג הממצא:</label>
+          <input type="hidden" id="obs-category-value" value="bird">
+          <div class="grid grid-cols-4 gap-2" id="category-buttons">
+            <button type="button" onclick="selectCategory('bird')" id="cat-btn-bird" class="cat-btn border-2 border-blue-400 bg-blue-50 rounded-xl p-2 text-center flex flex-col items-center cursor-pointer transition-all ring-2 ring-blue-300"><i class="fa-solid fa-dove text-xl text-blue-500 mb-1"></i><span class="text-[10px] font-bold text-blue-800">ציפור</span></button>
+            <button type="button" onclick="selectCategory('butterfly')" id="cat-btn-butterfly" class="cat-btn border-2 border-slate-200 bg-white rounded-xl p-2 text-center flex flex-col items-center cursor-pointer transition-all hover:bg-amber-50"><i class="fa-solid fa-bug text-xl text-amber-500 mb-1"></i><span class="text-[10px] font-bold text-slate-600">פרפר</span></button>
+            <button type="button" onclick="selectCategory('flower')" id="cat-btn-flower" class="cat-btn border-2 border-slate-200 bg-white rounded-xl p-2 text-center flex flex-col items-center cursor-pointer transition-all hover:bg-green-50"><i class="fa-solid fa-seedling text-xl text-green-500 mb-1"></i><span class="text-[10px] font-bold text-slate-600">צמח</span></button>
+            <button type="button" onclick="selectCategory('invasive')" id="cat-btn-invasive" class="cat-btn border-2 border-slate-200 bg-white rounded-xl p-2 text-center flex flex-col items-center cursor-pointer transition-all hover:bg-red-50"><i class="fa-solid fa-triangle-exclamation text-xl text-red-500 mb-1"></i><span class="text-[10px] font-bold text-slate-600">פולש</span></button>
+          </div>
+        </div>
+        <div><label class="block text-xs font-bold text-slate-700 mb-1">שם המין (ממולא ע"י AI):</label><input type="text" id="obs-species" placeholder="למשל: ירגזי מצוי..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-forest-500"></div>
+        <div><label class="block text-xs font-bold text-slate-700 mb-1">הסבר AI:</label><textarea id="obs-notes" rows="3" placeholder="הסבר מ-AI יופיע כאן אוטומטית..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-forest-500 leading-relaxed"></textarea></div>
+        <div class="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center bg-slate-50 cursor-pointer hover:bg-slate-100 transition-all" onclick="simulatePhotoCapture()">
+          <i class="fa-solid fa-camera text-xl text-slate-400 mb-1"></i>
+          <span class="block text-xs text-slate-500 font-bold" id="photo-status">לחצו לצילום שטח מהיר</span>
+        </div>
+        <button type="submit" class="w-full py-3 bg-forest-600 text-white rounded-xl text-sm font-bold hover:bg-forest-700 transition-all shadow-md"><i class="fa-solid fa-cloud-arrow-up ml-1"></i> שלחו דיווח למאגר המשותף</button>
+      </form>
+    </div>
+    <div class="bg-white rounded-2xl p-5 border border-forest-100 shadow-sm">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-2 mb-3">
+        <h4 class="font-bold text-slate-800 text-sm">דיווחים אחרונים מהקהילה</h4>
+        <span class="text-[9px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span> פעיל</span>
+      </div>
+      <div class="space-y-2.5 max-h-56 overflow-y-auto pr-1 custom-scroll" id="observations-list">
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between gap-3 text-xs"><div class="flex items-center gap-2.5"><div class="w-9 h-9 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-sm flex-shrink-0"><i class="fa-solid fa-dove"></i></div><div><span class="font-bold text-slate-800 block">ירגזי מצוי</span><span class="text-[10px] text-slate-400">משפחת לוי • 10 דק'</span></div></div><span class="text-[9px] text-slate-500 bg-white border px-1.5 py-0.5 rounded-lg shrink-0">תחנת עצים</span></div>
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between gap-3 text-xs"><div class="flex items-center gap-2.5"><div class="w-9 h-9 rounded-xl bg-red-100 text-red-600 flex items-center justify-center text-sm flex-shrink-0"><i class="fa-solid fa-seedling"></i></div><div><span class="font-bold text-slate-800 block">רקפת מצויה</span><span class="text-[10px] text-slate-400">כיתה ה'1 • שעה</span></div></div><span class="text-[9px] text-slate-500 bg-white border px-1.5 py-0.5 rounded-lg shrink-0">ליד השביל</span></div>
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between gap-3 text-xs"><div class="flex items-center gap-2.5"><div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-sm flex-shrink-0"><i class="fa-solid fa-bug"></i></div><div><span class="font-bold text-slate-800 block">כחליל האספסת</span><span class="text-[10px] text-slate-400">ד"ר כהן • אתמול</span></div></div><span class="text-[9px] text-slate-500 bg-white border px-1.5 py-0.5 rounded-lg shrink-0">קרחת יער</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INTERACTIVE VIDEO -->
+  <section id="sec-interactive-video" class="tab-section hidden flex flex-col gap-4">
+    <div class="bg-white rounded-2xl p-5 border border-forest-100 shadow-sm flex flex-col gap-3">
+      <div class="flex items-center gap-2 text-teal-700"><i class="fa-solid fa-circle-play text-xl"></i><h3 class="font-black text-lg">סיור רחפן אינטראקטיבי</h3></div>
+      <p class="text-xs text-slate-500 leading-relaxed">טוסו מעל הר אדר עם קריינות AI חיה. לחצו על Hotspots ופתרו חידות!</p>
+      <div class="relative w-full aspect-video bg-slate-900 rounded-2xl overflow-hidden border border-slate-700 shadow-xl">
+        <canvas id="videoCanvas" class="absolute inset-0 w-full h-full"></canvas>
+        <div class="absolute inset-0 p-3 pointer-events-none flex flex-col justify-between text-white font-mono text-[9px] z-10">
+          <div class="flex justify-between items-center">
+            <div class="bg-black/50 backdrop-blur-sm px-2 py-1 rounded-lg flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping"></span><span>REC • DRONE</span></div>
+            <div class="bg-black/50 backdrop-blur-sm px-2 py-1 rounded-lg" id="video-timer">00:00 / 01:20</div>
+          </div>
+          <div class="flex justify-between">
+            <div class="bg-black/50 backdrop-blur-sm p-1.5 rounded-lg flex flex-col gap-0.5"><span>ALT: <span id="hud-alt">820</span>m</span><span>SPD: 18km/h</span></div>
+            <div class="bg-black/50 backdrop-blur-sm p-1.5 rounded-lg text-left flex flex-col gap-0.5"><span>31.819°N 35.138°E</span><span>BAT: <span id="hud-bat">88</span>%</span></div>
+          </div>
+        </div>
+        <div id="video-hotspot-layer" class="absolute inset-0 z-20 pointer-events-auto">
+          <button onclick="triggerHotspot()" id="active-hotspot" class="hidden absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center w-14 h-14">
+            <span class="absolute w-full h-full rounded-full bg-teal-400/40 hotspot-ring"></span>
+            <span class="absolute w-9 h-9 rounded-full bg-teal-500/50 hotspot-ring" style="animation-delay:.6s"></span>
+            <div class="w-7 h-7 rounded-full bg-teal-600 border-2 border-white flex items-center justify-center text-white shadow-lg"><i class="fa-solid fa-info text-[10px]"></i></div>
+          </button>
+        </div>
+        <div id="video-checkpoint-screen" class="hidden absolute inset-0 bg-black/85 backdrop-blur-sm z-30 p-5 flex flex-col justify-center text-center text-white">
+          <div class="w-12 h-12 rounded-full bg-amber-500 text-slate-900 mx-auto flex items-center justify-center text-xl mb-3 shadow-lg"><i class="fa-solid fa-circle-question"></i></div>
+          <h5 class="font-black text-base mb-1 text-amber-400" id="checkpoint-title">מחסום חידון!</h5>
+          <p id="checkpoint-question" class="text-[12px] text-slate-200 mb-4 leading-relaxed max-w-xs mx-auto"></p>
+          <div id="checkpoint-answers" class="space-y-2 max-w-xs mx-auto w-full"></div>
+        </div>
+        <div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black to-transparent p-3 pt-8 z-10 flex items-center gap-3">
+          <button onclick="toggleVideoPlayback()" id="btn-video-play" class="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-all flex-shrink-0 backdrop-blur-sm"><i class="fa-solid fa-play text-sm"></i></button>
+          <div class="flex-grow"><div onclick="seekVideo(event)" class="w-full h-2 bg-white/20 rounded-full cursor-pointer relative" id="video-progress-bg"><div id="video-progress-bar" class="h-full bg-teal-400 w-0 rounded-full" style="transition:width .15s linear"></div></div></div>
+          <span id="video-scene-indicator" class="text-[9px] font-bold text-white/80 font-mono bg-black/40 px-1.5 py-0.5 rounded">גבעת הרדאר</span>
+        </div>
+      </div>
+      <div class="bg-slate-50 border border-slate-100 rounded-xl p-3">
+        <span class="text-xs font-bold text-slate-700 block mb-2">בחר נתיב טיסה:</span>
+        <div class="grid grid-cols-3 gap-2">
+          <button onclick="changeVideoScene('radar')" id="btn-scene-radar" class="scene-select-btn py-2 px-2 text-center rounded-xl bg-teal-600 text-white border border-teal-600 text-[10px] font-bold transition-all">🗼 גבעת הרדאר</button>
+          <button onclick="changeVideoScene('oak')" id="btn-scene-oak" class="scene-select-btn py-2 px-2 text-center rounded-xl bg-white text-slate-700 border border-slate-200 text-[10px] font-bold transition-all">🌳 אלון עתיק</button>
+          <button onclick="changeVideoScene('panorama')" id="btn-scene-panorama" class="scene-select-btn py-2 px-2 text-center rounded-xl bg-white text-slate-700 border border-slate-200 text-[10px] font-bold transition-all">🌅 תצפית</button>
+        </div>
+      </div>
+      <!-- AI Narration + TTS -->
+      <div class="bg-teal-50 border border-teal-100 rounded-2xl p-4 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2 text-teal-800 font-bold text-xs"><i class="fa-solid fa-volume-high text-teal-600"></i><span>קריינות AI — Claude + קול עברי:</span></div>
+          <div class="flex items-center gap-1">
+            <span id="speaking-indicator" class="hidden text-[9px] bg-teal-600 text-white px-1.5 py-0.5 rounded-full font-bold flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block"></span> מקריין</span>
+            <span class="text-[9px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-lg font-bold">AI+TTS</span>
+          </div>
+        </div>
+        <p id="video-narration-text" class="text-xs text-teal-900 leading-relaxed min-h-[48px]">בחרו נתיב טיסה למעלה כדי לשמוע קריינות AI על הר אדר.</p>
+        <div class="flex gap-2">
+          <button onclick="generateCustomVideoNarration()" id="btn-video-narrate" class="flex-grow py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2"><i class="fa-solid fa-sparkles"></i><span>חולל קריינות AI ✨</span></button>
+          <button onclick="speakNarration()" id="btn-speak" class="px-3 py-2 bg-white border border-teal-200 text-teal-700 rounded-xl text-xs font-bold hover:bg-teal-50 transition-all flex items-center gap-1.5"><i class="fa-solid fa-play"></i><span>השמע</span></button>
+          <button onclick="stopSpeaking()" id="btn-stop-speak" class="hidden px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-bold hover:bg-red-100 transition-all"><i class="fa-solid fa-stop"></i></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STORY -->
+  <section id="sec-station3" class="tab-section hidden flex flex-col gap-4">
+    <div class="bg-white rounded-2xl p-5 border border-forest-100 shadow-sm">
+      <div class="flex items-center gap-2 text-purple-600 mb-3"><i class="fa-solid fa-book-open-reader text-xl"></i><h3 class="font-black text-lg">מסעו של הזרע ביער הר אדר</h3></div>
+      <p class="text-xs text-slate-500 leading-relaxed mb-4">חוויה אינטראקטיבית. עזרו לזרע קטן של אורן ירושלים למצוא מקומו ולשרוד!</p>
+      <div class="bg-purple-50 rounded-2xl p-4 border border-purple-100 flex flex-col gap-4 relative">
+        <div class="absolute -top-3 -right-3 w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-md">AI</div>
+        <div class="flex justify-center py-5 bg-white/60 rounded-xl"><i id="story-icon" class="fa-solid fa-seedling text-6xl text-emerald-500 transition-all duration-500"></i></div>
+        <div><span class="text-[10px] text-purple-700 font-extrabold uppercase tracking-widest block mb-2">שלב בסיפור</span><p id="story-text" class="text-sm font-semibold text-slate-800 leading-relaxed">הרוח החזקה של הר אדר נושאת אתכם מתוך אצטרובל ישן של עץ אורן ענק. למטה רואים שלושה מקומות נחיתה. לאן תרצו שהרוח תסחוף אתכם?</p></div>
+        <div class="space-y-2" id="story-choices">
+          <button onclick="advanceStory(1)" class="w-full py-3 px-4 bg-white hover:bg-purple-50 text-slate-700 text-xs font-bold text-right rounded-xl border border-slate-200 transition-all flex items-center justify-between shadow-sm"><span>סחפו אותי אל קרחת יער פתוחה ומלאת שמש</span><i class="fa-solid fa-sun text-amber-400 mr-2 flex-shrink-0"></i></button>
+          <button onclick="advanceStory(2)" class="w-full py-3 px-4 bg-white hover:bg-purple-50 text-slate-700 text-xs font-bold text-right rounded-xl border border-slate-200 transition-all flex items-center justify-between shadow-sm"><span>סחפו אותי מתחת לשיח סבוך ומוצל</span><i class="fa-solid fa-leaf text-forest-500 mr-2 flex-shrink-0"></i></button>
+          <button onclick="advanceStory(3)" class="w-full py-3 px-4 bg-white hover:bg-purple-50 text-slate-700 text-xs font-bold text-right rounded-xl border border-slate-200 transition-all flex items-center justify-between shadow-sm"><span>סחפו אותי אל צידו של שביל הליכה</span><i class="fa-solid fa-shoe-prints text-slate-400 mr-2 flex-shrink-0"></i></button>
+        </div>
+        <button id="btn-reset-story" onclick="resetStory()" class="hidden w-full py-2.5 bg-slate-700 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-all">↺ התחילו מחדש</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI GUIDE -->
+  <section id="sec-ai-guide" class="tab-section hidden flex flex-col gap-4">
+    <div class="bg-white rounded-2xl p-5 border border-forest-100 shadow-sm flex flex-col gap-4">
+      <div class="flex items-center gap-2 text-teal-600"><i class="fa-solid fa-sparkles"></i><h3 class="font-bold text-lg">מדריך היער החכם — AI</h3></div>
+      <p class="text-xs text-slate-500 leading-relaxed">שאלו כל שאלה על החי, הצומח, ההיסטוריה והמסלולים ביער הר אדר.</p>
+      <div class="border border-slate-200 rounded-2xl bg-slate-50 h-80 flex flex-col overflow-hidden">
+        <div id="chat-messages" class="flex-grow p-3 space-y-3 overflow-y-auto custom-scroll text-xs">
+          <div class="flex items-start gap-2 max-w-[85%]"><div class="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center text-[10px] flex-shrink-0"><i class="fa-solid fa-leaf"></i></div><div class="bg-white border rounded-r-xl rounded-bl-xl p-2.5 shadow-sm text-slate-800 leading-relaxed">שלום! אני מדריך יער הר אדר המונע ב-Claude AI. מה תרצו לדעת היום? 🌿</div></div>
+        </div>
+        <div class="p-2 bg-slate-100 border-t border-slate-200 flex gap-1.5 overflow-x-auto whitespace-nowrap scroll-hide">
+          <button onclick="sendQuickQuery('איזה פרחים פורחים בהר אדר באביב?')" class="bg-white hover:bg-teal-50 text-slate-700 text-[10px] font-bold px-2.5 py-1 rounded-full border shadow-sm flex-shrink-0 transition-all">🌸 פרחי אביב</button>
+          <button onclick="sendQuickQuery('מה הם המינים הפולשים ביער?')" class="bg-white hover:bg-teal-50 text-slate-700 text-[10px] font-bold px-2.5 py-1 rounded-full border shadow-sm flex-shrink-0 transition-all">⚠️ מינים פולשים</button>
+          <button onclick="sendQuickQuery('ספר לי על גבעת הרדאר')" class="bg-white hover:bg-teal-50 text-slate-700 text-[10px] font-bold px-2.5 py-1 rounded-full border shadow-sm flex-shrink-0 transition-all">🗼 גבעת הרדאר</button>
+        </div>
+        <div class="p-2 bg-white border-t flex gap-2">
+          <input type="text" id="chat-input" placeholder="כתבו שאלה על היער..." class="flex-grow bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-teal-500" onkeypress="handleChatKeyPress(event)">
+          <button onclick="sendChatMessage()" class="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center hover:bg-teal-700 transition-all flex-shrink-0"><i class="fa-solid fa-paper-plane text-xs"></i></button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Modal -->
+<div id="custom-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl text-center flex flex-col gap-3">
+    <div id="modal-icon-container" class="w-12 h-12 rounded-full mx-auto flex items-center justify-center text-xl"><i id="modal-icon" class="fa-solid fa-circle-check"></i></div>
+    <div><h4 id="modal-title" class="font-bold text-slate-800 text-base mb-1">הצלחה</h4><p id="modal-message" class="text-xs text-slate-500 leading-relaxed"></p></div>
+    <button onclick="closeModal()" class="py-2.5 bg-forest-600 hover:bg-forest-700 text-white text-xs font-bold rounded-xl transition-all">המשך</button>
+  </div>
+</div>
+
+<!-- Bottom nav -->
+<div class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 py-3 px-4 shadow-lg z-40 max-w-2xl mx-auto">
+  <div class="flex justify-around items-center">
+    <button onclick="switchTab('map')" class="flex flex-col items-center gap-1 text-slate-500 hover:text-forest-600 transition-all"><i class="fa-solid fa-map-location-dot text-lg"></i><span class="text-[9px] font-bold">מפת היער</span></button>
+    <div class="relative -top-5">
+      <button onclick="openQuickQRScanSimulation()" class="w-14 h-14 bg-gradient-to-tr from-forest-700 to-emerald-500 text-white rounded-full flex items-center justify-center shadow-xl hover:opacity-95 transition-all pulse-btn border-4 border-white"><i class="fa-solid fa-qrcode text-xl"></i></button>
+      <span class="text-[9px] font-bold text-forest-700 text-center block mt-1">סריקת QR</span>
+    </div>
+    <button onclick="switchTab('ai-guide')" class="flex flex-col items-center gap-1 text-slate-500 hover:text-forest-600 transition-all"><i class="fa-solid fa-sparkles text-lg"></i><span class="text-[9px] font-bold">שאל AI</span></button>
+  </div>
+</div>
+
+<!-- QR Modal -->
+<div id="qr-modal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl flex flex-col gap-4 text-center">
+    <div class="flex justify-between items-center border-b pb-2"><span class="font-bold text-slate-800 text-sm">הדמיית סורק QR</span><button onclick="closeQRModal()" class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button></div>
+    <div class="border-4 border-forest-500 rounded-2xl p-6 bg-slate-900 relative aspect-square flex items-center justify-center overflow-hidden">
+      <div class="absolute inset-x-4 h-0.5 bg-red-500" style="top:50%;animation:bounce 1s infinite alternate"></div>
+      <div class="w-36 h-36 bg-white p-2 rounded-xl flex flex-col items-center justify-center border-2 border-slate-300"><i class="fa-solid fa-qrcode text-7xl text-slate-800"></i><span class="text-[8px] font-bold text-forest-700 mt-1">היער החכם הר אדר</span></div>
+    </div>
+    <p class="text-xs text-slate-500">בחרו שלט לסריקה מהירה:</p>
+    <div class="grid grid-cols-2 gap-2">
+      <button onclick="simulateQRRead('station1')" class="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl p-2 text-[11px] font-bold transition-all">🌲 תחנה א' — עצים</button>
+      <button onclick="simulateQRRead('station2')" class="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-xl p-2 text-[11px] font-bold transition-all">🔬 תחנה ב' — מדע</button>
+      <button onclick="simulateQRRead('interactive-video')" class="bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl p-2 text-[11px] font-bold transition-all">🚁 תחנה ג' — וידאו</button>
+      <button onclick="simulateQRRead('station3')" class="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-xl p-2 text-[11px] font-bold transition-all">📖 תחנה ד' — סיפור</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CATEGORY SELECTOR
+// ============================================================
+const catConfig = {
+  bird:     { border:'border-blue-400',  bg:'bg-blue-50',  ring:'ring-2 ring-blue-300',  text:'text-blue-800' },
+  butterfly:{ border:'border-amber-400', bg:'bg-amber-50', ring:'ring-2 ring-amber-300', text:'text-amber-800' },
+  flower:   { border:'border-green-400', bg:'bg-green-50', ring:'ring-2 ring-green-300', text:'text-green-800' },
+  invasive: { border:'border-red-400',   bg:'bg-red-50',   ring:'ring-2 ring-red-300',   text:'text-red-800'  },
+};
+function selectCategory(cat) {
+  document.getElementById('obs-category-value').value = cat;
+  ['bird','butterfly','flower','invasive'].forEach(c => {
+    const btn = document.getElementById('cat-btn-'+c);
+    if (!btn) return;
+    if (c === cat) {
+      const cfg = catConfig[c];
+      btn.className = `cat-btn border-2 ${cfg.border} ${cfg.bg} ${cfg.ring} rounded-xl p-2 text-center flex flex-col items-center cursor-pointer transition-all`;
+    } else {
+      btn.className = 'cat-btn border-2 border-slate-200 bg-white rounded-xl p-2 text-center flex flex-col items-center cursor-pointer transition-all hover:bg-slate-50';
+    }
+  });
+}
+// ============================================================
+// CLAUDE API — calls Netlify serverless function
+// ============================================================
+async function callClaude(userMessage, systemPrompt) {
+  const response = await fetch('/.netlify/functions/claude', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: userMessage,
+      system: systemPrompt || 'אתה מדריך יער חכם לביישוב הר אדר. ענה תמיד בעברית קצרה וידידותית.'
+    })
+  });
+  if (!response.ok) throw new Error(`שגיאת שרת: ${response.status}`);
+  const data = await response.json();
+  if (!data.text) throw new Error('תגובה ריקה מה-AI');
+  return data.text;
+}
+
+// ============================================================
+// TABS
+// ============================================================
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-section').forEach(s => s.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  const sec = document.getElementById('sec-' + tabId);
+  if (sec) sec.classList.remove('hidden');
+  const btn = document.getElementById('tab-' + tabId);
+  if (btn) btn.classList.add('active');
+  if (tabId === 'map' && !leafletMap) setTimeout(initLeafletMap, 100);
+  if (tabId === 'interactive-video') initVideoTour();
+  if (tabId === 'station1') calculateTreeData();
+}
+
+// ============================================================
+// MAP
+// ============================================================
+let leafletMap = null;
+function initLeafletMap() {
+  if (leafletMap) return;
+  leafletMap = L.map('leafletMap', { center:[31.8198,35.1382], zoom:15, scrollWheelZoom:false });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap' }).addTo(leafletMap);
+  [
+    { id:'station1', title:'תחנה א\': חקר העצים', lat:31.8185, lng:35.1370, color:'#d97706', icon:'🌲' },
+    { id:'station2', title:'תחנה ב\': מדע אזרחי', lat:31.8192, lng:35.1390, color:'#2563eb', icon:'🔬' },
+    { id:'interactive-video', title:'תחנה ג\': סיור רחפן', lat:31.8210, lng:35.1380, color:'#0d9488', icon:'🚁' },
+    { id:'station3', title:'תחנה ד\': מסעו של הזרע', lat:31.8175, lng:35.1360, color:'#7c3aed', icon:'📖' },
+  ].forEach(st => {
+    const icon = L.divIcon({ className:'', html:`<div style="width:36px;height:36px;background:${st.color};border:3px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:pointer;">${st.icon}</div>`, iconSize:[36,36], iconAnchor:[18,18] });
+    L.marker([st.lat,st.lng],{icon}).addTo(leafletMap).bindPopup(`<b>${st.title}</b>`).on('click',()=>switchTab(st.id));
+  });
+}
+
+// ============================================================
+// TREES — 18 species
+// ============================================================
+const treeSpecies = {
+  pine:       { he:'אורן ירושלים',   factor:0.60, co2:0.033, o2:2.5, fact:'האורן הנפוץ ביותר ביערות ישראל — ניחוח הרוזמרין שלו מאפיין את חורש הר אדר.' },
+  cypress:    { he:'ברוש מצוי',      factor:0.55, co2:0.028, o2:2.2, fact:'הברוש מגיע לגובה 30 מטר ויוצר הגנה מרוחות כגדר טבעית.' },
+  eucalyptus: { he:'אקליפטוס',       factor:0.40, co2:0.040, o2:3.2, fact:'מהגר מאוסטרליה — שותה כמויות עצומות מים ומסוכן לאיזון הקרקע.' },
+  oak:        { he:'אלון מצוי',      factor:1.20, co2:0.055, o2:1.8, fact:'האלון יכול לחיות מעל 500 שנה — עץ הכבוד של החורש הים-תיכוני.' },
+  terebinth:  { he:'אלה ארצישראלית',factor:0.90, co2:0.040, o2:1.5, fact:'הבטנה שצמחה בארץ מאז ימי המקרא — שרשיה עמוקות ועמידות לבצורת.' },
+  carob:      { he:'חרוב מצוי',      factor:1.10, co2:0.045, o2:1.4, fact:'פירות החרוב שימשו מזה אלפי שנים. החרוב מסמל אריכות ימים.' },
+  lentisk:    { he:'לענה',           factor:1.30, co2:0.025, o2:0.9, fact:'שיח ארומטי המאפיין את מקיה הים-תיכוני — מפתח חרקים ייחודיים.' },
+  strawberry: { he:'קטלב מצוי',      factor:0.85, co2:0.035, o2:1.2, fact:'הפרי האדום של הקטלב מאכיל ציפורי יער רבות.' },
+  olive:      { he:'זית אירופי',     factor:1.80, co2:0.060, o2:1.1, fact:'הזית — סמל השלום. עצים ישראלים יכולים להגיע לגיל 2,000 שנה!' },
+  almond:     { he:'שקד',            factor:0.80, co2:0.028, o2:1.6, fact:'השקד הוא הפורח הראשון בישראל — מסמן תחילת האביב בשבט.' },
+  fig:        { he:'תאנה',           factor:0.75, co2:0.032, o2:1.5, fact:'התאנה אחד משבעת המינים. חרקים זעירים נדרשים לאבקת פרי התאנה.' },
+  pomegranate:{ he:'רימון',          factor:1.00, co2:0.022, o2:1.0, fact:'הרימון מופיע בטקסטים דתיים יהודיים מאז ימי קדם.' },
+  pistachio:  { he:'פיסטוק אטלנטי', factor:1.40, co2:0.038, o2:1.0, fact:'הפיסטוק גדל לאט מאוד אך חי מאות שנים.' },
+  tamarisk:   { he:'אתל',            factor:0.50, co2:0.027, o2:1.8, fact:'האתל מתמלח את הקרקע — מנגנון הגנה ייחודי לדחיית מינים מתחרים.' },
+  poplar:     { he:'צפצפה לבנה',     factor:0.45, co2:0.035, o2:2.4, fact:'עלי הצפצפה "מרשרשים" ברוח — נועדו לפנות חום ולשפר פוטוסינתזה.' },
+  sycamore:   { he:'שקמה',           factor:0.72, co2:0.042, o2:1.9, fact:'בשקמה הקדושה חצבו מצרים ארונות — עצה עמידה לרקב ומים.' },
+  acacia:     { he:'שיטה',           factor:0.50, co2:0.025, o2:1.7, fact:'מארון ברית ישראל נבנה מעץ שיטה — עמיד ויפה.' },
+  redbud:     { he:'כליל החורש',     factor:0.82, co2:0.030, o2:1.4, fact:'פרחיו האדומים-סגולים פורחים לפני העלים — ריהוט טבע חגיגי.' },
+  bay:        { he:'ערמון',          factor:0.78, co2:0.032, o2:1.6, fact:'הערמון נפוץ ביערות הרי ירושלים ומעניק צל נהדר בקיץ.' },
+  judas:      { he:'עץ יהודה',       factor:0.88, co2:0.028, o2:1.3, fact:'שיח יפהפה הפורח בסגול — בית גידול לדבורי בר רבות.' },
+};
+
+function syncCircumference(src) {
+  const sl = document.getElementById('tree-circumference-slider');
+  const inp = document.getElementById('tree-circumference');
+  if (src === 'slider') inp.value = sl.value; else sl.value = inp.value;
+  calculateTreeData();
+}
+
+function calculateTreeData() {
+  const type = document.getElementById('tree-type').value;
+  const circ = parseFloat(document.getElementById('tree-circumference').value) || 80;
+  const sp = treeSpecies[type] || treeSpecies.pine;
+  const diam = circ / Math.PI;
+  const age = Math.round(diam * sp.factor);
+  const co2 = (age * sp.co2).toFixed(2);
+  const o2 = Math.round(diam * sp.o2 * 2.5);
+  document.getElementById('res-age').textContent = age;
+  document.getElementById('res-co2').textContent = co2;
+  document.getElementById('res-o2').textContent = o2;
+  document.getElementById('res-diameter').textContent = diam.toFixed(1);
+  document.getElementById('tree-type-badge').textContent = sp.he;
+  document.getElementById('tree-fun-fact').innerHTML = `<span class="font-bold text-forest-700">💡 ידעת?</span> ${sp.fact}`;
+  drawTreeRings(Math.min(age,120));
+}
+
+function drawTreeRings(age) {
+  const canvas = document.getElementById('treeRingCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d'), w=canvas.width, h=canvas.height, cx=w/2, cy=h/2, maxR=85;
+  ctx.clearRect(0,0,w,h);
+  ctx.beginPath(); ctx.arc(cx,cy,maxR+5,0,Math.PI*2); ctx.fillStyle='#5c3d1e'; ctx.fill();
+  ctx.beginPath(); ctx.arc(cx,cy,maxR,0,Math.PI*2); ctx.fillStyle='#f5deb3'; ctx.fill();
+  const step = Math.max(1.2, maxR/Math.max(age,1));
+  for (let i=1;i<=age;i++) {
+    const r=i*step; if(r>maxR) break;
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+    const d=(i%7===0);
+    ctx.strokeStyle=d?'rgba(60,30,5,.65)':'rgba(90,55,20,.28)';
+    ctx.lineWidth=d?1.5:0.7; ctx.stroke();
+  }
+  ctx.beginPath(); ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fillStyle='#3e1a00'; ctx.fill();
+}
+
+async function generateCustomTreeInsight() {
+  const type = document.getElementById('tree-type').value;
+  const sp = treeSpecies[type] || treeSpecies.pine;
+  const circ = document.getElementById('tree-circumference').value;
+  const age = document.getElementById('res-age').textContent;
+  const co2 = document.getElementById('res-co2').textContent;
+  const o2 = document.getElementById('res-o2').textContent;
+  const diam = document.getElementById('res-diameter').textContent;
+  const el = document.getElementById('ai-ecological-insight');
+  const btn = document.getElementById('btn-tree-ai');
+  el.innerHTML = `<span class="animate-pulse text-slate-400 flex items-center gap-1.5"><i class="fa-solid fa-spinner animate-spin"></i> Claude מחשב תובנה ייחודית...</span>`;
+  btn.disabled = true;
+  try {
+    const res = await callClaude(
+      `מדדנו ${sp.he} עם היקף ${circ}ס"מ (קוטר ${diam}ס"מ). גיל משוער: ${age} שנה. ספח ${co2} טון CO₂ ומייצר ${o2}ק"ג O₂/שנה. תן תובנה ייחודית (3-4 משפטים) על חשיבותו ביישוב הר אדר.`,
+      `אתה אקולוג ומדען יערות ישראלי מומחה לאזור הרי ירושלים. כתוב פסקה קצרה מרתקת ומדעית לילדים ומשפחות. היה נלהב, מדויק ובעברית ברורה.`
+    );
+    el.textContent = res;
+  } catch(e) {
+    el.textContent = `עץ ${sp.he} בגיל ${age} שנה הוא אוצר ביולוגי ביישוב הר אדר — מייצר חמצן לכ-${Math.round(parseInt(o2)/100)} אנשים מדי שנה! (חיבור AI זמנית לא זמין)`;
+  } finally { btn.disabled = false; }
+}
+
+// ============================================================
+// CITIZEN SCIENCE
+// ============================================================
+async function identifySpeciesWithAI() {
+  const desc = document.getElementById('ai-desc-input').value.trim();
+  const btn = document.getElementById('btn-identify-ai');
+  const status = document.getElementById('ai-identify-status');
+  if (!desc) { openModal("חסר תיאור","כתבו תיאור של מה שראיתם — צבע, צורה, גודל, התנהגות.","fa-keyboard","bg-amber-100","text-amber-600"); return; }
+  btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> מזהה...`;
+  status.classList.remove('hidden');
+  try {
+    const raw = await callClaude(
+      `ביער הר אדר ראיתי: "${desc}"\n\nהחזר JSON בלבד, בפורמט הזה בדיוק:\n{"species":"שם המין בעברית","explanation":"הסבר קצר 2 משפטים","category":"bird"}\n\nהערכים האפשריים ל-category: bird, butterfly, flower, invasive`,
+      `אתה מומחה ביולוגיה ישראלי. החזר JSON בלבד. אין מבוא, אין סיום, אין backticks. רק האובייקט JSON עצמו.`
+    );
+    // Extract JSON robustly - find first { and last }
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start === -1 || end === -1) throw new Error("לא התקבל JSON");
+    const result = JSON.parse(raw.slice(start, end + 1));
+    document.getElementById('obs-species').value = result.species || '';
+    document.getElementById('obs-notes').value = result.explanation || '';
+    const validCat = ['bird','butterfly','flower','invasive'].includes(result.category) ? result.category : 'bird';
+    selectCategory(validCat);
+    openModal("זיהוי AI הושלם! ✨",`זוהה: "${result.species}". הטופס מולא אוטומטית!`,"fa-wand-magic-sparkles","bg-teal-100","text-teal-700");
+  } catch(e) {
+    openModal("שגיאת זיהוי",`לא הצלחנו לפענח את התיאור. נסו לפרט יותר (${e.message}).`,"fa-circle-exclamation","bg-red-100","text-red-600");
+  } finally {
+    btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> <span>זהה!</span>`;
+    status.classList.add('hidden');
+  }
+}
+
+let userPhotoAttached = false;
+function simulatePhotoCapture() {
+  userPhotoAttached = true;
+  const ps = document.getElementById('photo-status');
+  ps.textContent = "📸 תמונת שטח צורפה!"; ps.classList.add('text-green-600');
+}
+
+function handleObservationSubmit(event) {
+  event.preventDefault();
+  const species = document.getElementById('obs-species').value.trim();
+  if (!species) { openModal("שגיאה","הזינו שם מין או השתמשו בזיהוי AI.","fa-circle-exclamation","bg-red-100","text-red-600"); return; }
+  const cat = document.getElementById('obs-category-value').value || 'bird';
+  const icons = {bird:'fa-dove',butterfly:'fa-bug',flower:'fa-seedling',invasive:'fa-triangle-exclamation'};
+  const colors = {bird:'bg-blue-100 text-blue-600',butterfly:'bg-amber-100 text-amber-600',flower:'bg-green-100 text-green-600',invasive:'bg-red-100 text-red-600'};
+  const notes = document.getElementById('obs-notes').value.trim();
+  const item = document.createElement('div');
+  item.className = "p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-start justify-between gap-3 text-xs float-up";
+  item.innerHTML = `<div class="flex items-start gap-2.5"><div class="w-9 h-9 rounded-xl ${colors[cat]} flex items-center justify-center text-sm flex-shrink-0"><i class="fa-solid ${icons[cat]}"></i></div><div><span class="font-bold text-slate-800 block">${species}</span><span class="text-[10px] text-forest-700">אתם • הרגע</span>${notes?`<span class="text-[10px] text-slate-500 block mt-0.5">${notes.slice(0,80)}...</span>`:''}</div></div><span class="text-[9px] shrink-0 text-slate-500 bg-white border px-1.5 py-0.5 rounded-lg">מסלול ראשי</span>`;
+  document.getElementById('observations-list').insertBefore(item,document.getElementById('observations-list').firstChild);
+  document.getElementById('obs-species').value=''; document.getElementById('obs-notes').value=''; document.getElementById('ai-desc-input').value='';
+  document.getElementById('photo-status').textContent='לחצו לצילום שטח מהיר'; document.getElementById('photo-status').classList.remove('text-green-600');
+  openModal("דיווח התקבל ✓",`התצפית על "${species}" נוספה למאגר המדע האזרחי!`,"fa-circle-check","bg-emerald-100","text-emerald-600");
+}
+
+// ============================================================
+// VIDEO PLAYER
+// ============================================================
+let videoPlaying=false, videoTime=0, videoDuration=80, videoInterval=null, currentScene='radar', reachedCheckpoints={};
+
+const hotspotsData = {
+  radar:    {time:10,alt:840,title:"אנדרטת גבעת הרדאר 🎖️",text:"גבעת הרדאר הייתה נקודה אסטרטגית במלחמת השחרור. חטיבת הראל לחמה כאן בקרבות קשים."},
+  oak:      {time:15,alt:790,title:"אלון מצוי עתיק 🌳",text:"מערכת השורשים של האלון מייצבת את המדרון ומונעת סחף. הוא יכול לחיות מעל 500 שנה!"},
+  panorama: {time:12,alt:830,title:"נוף קו החוף 🌅",text:"בימים בהירים רואים מהר אדר את כל מישור החוף מאשדוד ועד נתניה."}
+};
+const checkpointsData = {
+  radar:    {time:25,title:"מחסום חידון! 🎮",question:"מה היה בגבעת הרדאר שנתן לה את שמה?",choices:[{text:'מכ"ם גילוי מטוסים בריטי',correct:true},{text:'משדר רדיו',correct:false},{text:'מגדל מים',correct:false}]},
+  oak:      {time:30,title:"בדיקת בוטניקה 🔬",question:"איזה פרי גדל על האלון המצוי ומזין חיות בר?",choices:[{text:'בלוטים בספלולים',correct:true},{text:'אצטרובלים',correct:false},{text:'ענבות שחורות',correct:false}]},
+  panorama: {time:22,title:"שאלת גיאולוגיה ⛰️",question:"מה גובה הר אדר מעל פני הים?",choices:[{text:'כ-880 מטרים',correct:true},{text:'כ-300 מטרים',correct:false},{text:'כ-1,200 מטרים',correct:false}]}
+};
+
+function initVideoTour() {
+  // Small delay to let the section become visible and get proper dimensions
+  setTimeout(() => { renderVideoCanvas(); updateVideoUI(); }, 50);
+}
+function toggleVideoPlayback() { videoPlaying?stopVideoPlayback():startVideoPlayback(); }
+function startVideoPlayback() {
+  if(videoInterval)clearInterval(videoInterval);
+  videoPlaying=true; document.getElementById('btn-video-play').innerHTML=`<i class="fa-solid fa-pause text-sm"></i>`;
+  videoInterval=setInterval(()=>{videoTime+=0.5;if(videoTime>=videoDuration){videoTime=0;reachedCheckpoints={};}checkVideoEvents();renderVideoCanvas();updateVideoUI();},500);
+}
+function stopVideoPlayback() {
+  videoPlaying=false; if(videoInterval)clearInterval(videoInterval);
+  document.getElementById('btn-video-play').innerHTML=`<i class="fa-solid fa-play text-sm"></i>`;
+}
+function seekVideo(event) {
+  const bg=document.getElementById('video-progress-bg'); const rect=bg.getBoundingClientRect();
+  videoTime=Math.round(((event.clientX-rect.left)/rect.width)*videoDuration);
+  renderVideoCanvas(); updateVideoUI();
+}
+function changeVideoScene(sceneId) {
+  stopVideoPlayback(); currentScene=sceneId; videoTime=0; reachedCheckpoints={};
+  document.querySelectorAll('.scene-select-btn').forEach(b=>{b.className=b.className.replace('bg-teal-600 text-white border-teal-600','bg-white text-slate-700 border-slate-200');});
+  const a=document.getElementById('btn-scene-'+sceneId);
+  if(a)a.className=a.className.replace('bg-white text-slate-700 border-slate-200','bg-teal-600 text-white border-teal-600');
+  document.getElementById('video-scene-indicator').textContent={radar:'גבעת הרדאר',oak:'אלון עתיק',panorama:'תצפית פנורמית'}[sceneId];
+  renderVideoCanvas(); updateVideoUI(); generateCustomVideoNarration(); setTimeout(startVideoPlayback,800);
+}
+function checkVideoEvents() {
+  const hs=hotspotsData[currentScene]; const btn=document.getElementById('active-hotspot');
+  Math.abs(videoTime-hs.time)<=3?btn.classList.remove('hidden'):btn.classList.add('hidden');
+  const cp=checkpointsData[currentScene];
+  if(Math.floor(videoTime)===cp.time&&!reachedCheckpoints[currentScene]){stopVideoPlayback();triggerCheckpoint(cp);}
+}
+function triggerHotspot() {
+  stopVideoPlayback(); const d=hotspotsData[currentScene];
+  openModal(d.title,d.text,"fa-circle-info","bg-teal-100","text-teal-700");
+}
+function triggerCheckpoint(cp) {
+  const sc=document.getElementById('video-checkpoint-screen');
+  document.getElementById('checkpoint-question').textContent=cp.question;
+  const box=document.getElementById('checkpoint-answers'); box.innerHTML='';
+  cp.choices.forEach(ch=>{
+    const b=document.createElement('button');
+    b.className="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-[11px] font-semibold transition-all border border-slate-600 text-right px-4";
+    b.textContent=ch.text; b.onclick=()=>answerCheckpoint(ch.correct); box.appendChild(b);
+  });
+  sc.classList.remove('hidden');
+}
+function answerCheckpoint(correct) {
+  document.getElementById('video-checkpoint-screen').classList.add('hidden');
+  reachedCheckpoints[currentScene]=true;
+  if(correct){openModal("תשובה נכונה! 🎉","הרחפן חזר לשליטה. ממשיכים!","fa-circle-check","bg-emerald-100","text-emerald-600");startVideoPlayback();}
+  else{openModal("תשובה שגויה ⚠️","ניסיון שנייה — חוזרים!","fa-circle-exclamation","bg-red-100","text-red-600");videoTime=checkpointsData[currentScene].time-1;reachedCheckpoints[currentScene]=false;startVideoPlayback();}
+}
+function updateVideoUI() {
+  const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+  document.getElementById('video-timer').textContent=`${fmt(videoTime)} / ${fmt(videoDuration)}`;
+  document.getElementById('video-progress-bar').style.width=`${(videoTime/videoDuration)*100}%`;
+  document.getElementById('hud-alt').textContent=Math.round(hotspotsData[currentScene].alt+Math.sin(videoTime*.2)*15);
+  document.getElementById('hud-bat').textContent=Math.max(20,Math.round(88-videoTime*.6));
+}
+
+function renderVideoCanvas() {
+  const canvas = document.getElementById('videoCanvas'); if(!canvas)return;
+  const ctx = canvas.getContext('2d');
+  // Use clientWidth/clientHeight or fallback to container size
+  const container = canvas.parentElement;
+  const w = canvas.width = (canvas.clientWidth || container?.clientWidth || 400);
+  const h = canvas.height = (canvas.clientHeight || container?.clientHeight || 225);
+  ctx.clearRect(0,0,w,h); const t=videoTime*2;
+  // Sky gradient
+  const sky=ctx.createLinearGradient(0,0,0,h*.6);
+  if(currentScene==='panorama'){sky.addColorStop(0,'#fb923c');sky.addColorStop(.5,'#fcd34d');sky.addColorStop(1,'#fef3c7');}
+  else{sky.addColorStop(0,'#0369a1');sky.addColorStop(.5,'#7dd3fc');sky.addColorStop(1,'#e0f2fe');}
+  ctx.fillStyle=sky; ctx.fillRect(0,0,w,h);
+  // Sun
+  if(currentScene!=='panorama'){ctx.beginPath();ctx.arc(w*.82,h*.18,18,0,Math.PI*2);ctx.fillStyle='rgba(253,224,71,.85)';ctx.fill();ctx.beginPath();ctx.arc(w*.82,h*.18,28,0,Math.PI*2);ctx.fillStyle='rgba(253,224,71,.15)';ctx.fill();}
+  // Clouds
+  [[.15,.15,50,18],[.6,.1,70,22],[.35,.2,40,14]].forEach(([x,y,rx,ry])=>{ctx.beginPath();ctx.ellipse(((w*x+t*12)%(w+120))-60,h*y,rx,ry,0,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.65)';ctx.fill();});
+  // Far hills
+  ctx.beginPath();ctx.moveTo(0,h);for(let x=0;x<=w;x+=8)ctx.lineTo(x,h*.42+Math.sin(x*.004+t*.008)*18);ctx.lineTo(w,h);ctx.fillStyle='rgba(101,163,113,.5)';ctx.fill();
+  // Mid hills
+  ctx.beginPath();ctx.moveTo(0,h);for(let x=0;x<=w;x+=8)ctx.lineTo(x,h*.55+Math.sin(x*.007+t*.018+1.5)*28);ctx.lineTo(w,h);ctx.fillStyle='rgba(52,118,69,.65)';ctx.fill();
+  // Scene objects
+  const ox=w*.45-Math.sin(t*.012)*35;
+  if(currentScene==='radar'){
+    ctx.fillStyle='#1e293b'; ctx.fillRect(ox-6,h*.38,12,55);
+    ctx.beginPath();ctx.moveTo(ox-22,h*.38);ctx.lineTo(ox+22,h*.38);ctx.lineTo(ox,h*.28);ctx.closePath();ctx.fillStyle='#334155';ctx.fill();
+    ctx.beginPath();ctx.arc(ox,h*.38,18,Math.PI,0);ctx.fillStyle='#475569';ctx.fill();
+  } else if(currentScene==='oak'){
+    ctx.fillStyle='#5c3d1e';ctx.fillRect(ox-7,h*.5,14,h*.5);
+    [[0,-5,50],[-28,-22,35],[30,-18,38],[-8,-38,30]].forEach(([dx,dy,r])=>{ctx.beginPath();ctx.arc(ox+dx,h*.48+dy,r,0,Math.PI*2);ctx.fillStyle='rgba(20,90,50,.9)';ctx.fill();});
+  } else {
+    ctx.beginPath();ctx.moveTo(0,h);
+    [[.05,.38],[.18,.29],[.33,.33],[.5,.26],[.66,.31],[.82,.28],[1,.35]].forEach(([px,py])=>ctx.lineTo(w*px,h*py));
+    ctx.lineTo(w,h);ctx.fillStyle='rgba(30,80,50,.8)';ctx.fill();
+  }
+  // Foreground
+  ctx.beginPath();ctx.moveTo(0,h);for(let x=0;x<=w;x+=12)ctx.lineTo(x,h*.75+Math.sin(x*.018+t*.08)*12);ctx.lineTo(w,h);ctx.fillStyle='rgba(10,60,30,.85)';ctx.fill();
+  // Vignette
+  const vig=ctx.createRadialGradient(w/2,h/2,w*.3,w/2,h/2,w*.75);vig.addColorStop(0,'rgba(0,0,0,0)');vig.addColorStop(1,'rgba(0,0,0,0.28)');ctx.fillStyle=vig;ctx.fillRect(0,0,w,h);
+}
+
+// ============================================================
+// TTS — Web Speech API
+// ============================================================
+function speakNarration() {
+  if(!('speechSynthesis' in window)){openModal("לא נתמך","הדפדפן אינו תומך בקריינות קולית.","fa-volume-xmark","bg-red-100","text-red-600");return;}
+  const text=document.getElementById('video-narration-text').textContent.trim();
+  if(!text||text.startsWith('בחרו נתיב'))return;
+  stopSpeaking();
+  const utter=new SpeechSynthesisUtterance(text);
+  utter.lang='he-IL'; utter.rate=0.88; utter.pitch=1.05;
+  const voices=window.speechSynthesis.getVoices();
+  const hev=voices.find(v=>v.lang.startsWith('he'));
+  if(hev)utter.voice=hev;
+  utter.onstart=()=>{document.getElementById('speaking-indicator').classList.remove('hidden');document.getElementById('btn-speak').classList.add('hidden');document.getElementById('btn-stop-speak').classList.remove('hidden');};
+  utter.onend=utter.onerror=()=>{document.getElementById('speaking-indicator').classList.add('hidden');document.getElementById('btn-speak').classList.remove('hidden');document.getElementById('btn-stop-speak').classList.add('hidden');};
+  window.speechSynthesis.speak(utter);
+}
+function stopSpeaking() {
+  window.speechSynthesis.cancel();
+  document.getElementById('speaking-indicator').classList.add('hidden');
+  document.getElementById('btn-speak').classList.remove('hidden');
+  document.getElementById('btn-stop-speak').classList.add('hidden');
+}
+async function generateCustomVideoNarration() {
+  const el=document.getElementById('video-narration-text'); const btn=document.getElementById('btn-video-narrate');
+  el.innerHTML=`<span class="animate-pulse text-slate-400 flex items-center gap-1.5"><i class="fa-solid fa-spinner animate-spin"></i> Claude כותב קריינות...</span>`;
+  btn.disabled=true; stopSpeaking();
+  const labels={radar:'גבעת הרדאר והאנדרטה',oak:'אלון מצוי עתיק ביער',panorama:'תצפית פנורמית להרי ירושלים'};
+  const alt=document.getElementById('hud-alt').textContent;
+  try {
+    const res=await callClaude(
+      `אנו טסים מעל הר אדר בגובה ${alt} מטרים, מעל ${labels[currentScene]}. כתוב קריינות קצרה ומלהיבה (2-3 משפטים) לילדים ומשפחות.`,
+      `אתה קריין רחפן מרתק ביישוב הר אדר. כתוב 2-3 משפטים בעברית רהוטה וחיה, ללא כותרות — רק טקסט זורם.`
+    );
+    el.textContent=res; setTimeout(speakNarration,400);
+  } catch(e) {
+    el.textContent=`מעל ${labels[currentScene]}, בגובה ${alt} מטרים, נשקף נוף מרהיב של הרי ירושלים. החורש הים-תיכוני הירוק משתרע לכל עבר — ביתם של מאות מינים. (חיבור AI זמנית לא זמין)`;
+  } finally { btn.disabled=false; }
+}
+
+// ============================================================
+// STORY
+// ============================================================
+let storyStep=0;
+function advanceStory(choice) {
+  const textEl=document.getElementById('story-text'),choicesEl=document.getElementById('story-choices'),iconEl=document.getElementById('story-icon');
+  if(storyStep===0){
+    if(choice===1){iconEl.className="fa-solid fa-cloud-sun text-6xl text-amber-500 transition-all duration-500";textEl.innerHTML="מצאתם מקום מדהים — פתוח ושמשי! חורף גשום מגיע. נבטתם בהצלחה! פתאום קבוצת חזירים מגיעה לחפור. מה תעשו?";choicesEl.innerHTML=`<button onclick="advanceStory(11)" class="w-full py-3 px-4 bg-white hover:bg-purple-50 text-slate-700 text-xs font-bold text-right rounded-xl border border-slate-200 transition-all flex items-center justify-between shadow-sm"><span>הסתרו מתחת לשכבת עלים יבשים</span><i class="fa-solid fa-eye-slash text-slate-400 mr-2 flex-shrink-0"></i></button><button onclick="advanceStory(12)" class="w-full py-3 px-4 bg-white hover:bg-purple-50 text-slate-700 text-xs font-bold text-right rounded-xl border border-slate-200 transition-all flex items-center justify-between shadow-sm"><span>העמיקו שורשים לסלע</span><i class="fa-solid fa-anchor text-amber-600 mr-2 flex-shrink-0"></i></button>`;}
+    else if(choice===2){iconEl.className="fa-solid fa-tree text-6xl text-stone-500 transition-all duration-500";textEl.innerHTML="נחתתם מתחת לשיח אלון — מוגנים, אך חסר אור שמש. צמחים מתחרים מכתרים. לגדול גבוה מהר או להתפרס?";choicesEl.innerHTML=`<button onclick="advanceStory(21)" class="w-full py-3 px-4 bg-white hover:bg-purple-50 text-slate-700 text-xs font-bold text-right rounded-xl border border-slate-200 transition-all flex items-center justify-between shadow-sm"><span>צמחו גבוה לעבר חריצי שמש</span><i class="fa-solid fa-arrow-up text-emerald-500 mr-2 flex-shrink-0"></i></button><button onclick="advanceStory(22)" class="w-full py-3 px-4 bg-white hover:bg-purple-50 text-slate-700 text-xs font-bold text-right rounded-xl border border-slate-200 transition-all flex items-center justify-between shadow-sm"><span>התפרסו לצדדים</span><i class="fa-solid fa-arrows-left-right text-stone-500 mr-2 flex-shrink-0"></i></button>`;}
+    else{iconEl.className="fa-solid fa-triangle-exclamation text-6xl text-red-500 transition-all duration-500";textEl.innerHTML="נחתתם על קצה השביל! מטיילים עלולים לדרוך. רוח קלה מציעה הזדמנות אחרונה לזזת.";choicesEl.innerHTML=`<button onclick="advanceStory(31)" class="w-full py-3 px-4 bg-white hover:bg-purple-50 text-slate-700 text-xs font-bold text-right rounded-xl border border-slate-200 transition-all flex items-center justify-between shadow-sm"><span>נצלו הרוח והתגלגלו לחורש</span><i class="fa-solid fa-wind text-sky-400 mr-2 flex-shrink-0"></i></button><button onclick="advanceStory(32)" class="w-full py-3 px-4 bg-white hover:bg-purple-50 text-slate-700 text-xs font-bold text-right rounded-xl border border-slate-200 transition-all flex items-center justify-between shadow-sm"><span>הישארו ותקוו למטיילים שמרנים</span><i class="fa-solid fa-shoe-prints text-slate-400 mr-2 flex-shrink-0"></i></button>`;}
+    storyStep=1;
+  } else {
+    choicesEl.innerHTML=''; document.getElementById('btn-reset-story').classList.remove('hidden');
+    if([12,21,31].includes(choice)){iconEl.className="fa-solid fa-tree-large text-7xl text-emerald-600 transition-all duration-500";textEl.innerHTML="🌲✨ כל הכבוד! הבחירה הנבונה שלכם עזרה לנבט לשרוד. כעבור 50 שנה הזרע הפך לעץ אורן אדיר — מעניק צל, חמצן ומחיה לציפורים רבות!";}
+    else{iconEl.className="fa-solid fa-seedling text-6xl text-amber-700 transition-all duration-500";textEl.innerHTML="😔 הפעם הטבע היה קשוח מדי. אל דאגה — היער מייצר אלפי זרעים חדשים! נסו שוב ובחרו חכם יותר.";}
+  }
+}
+function resetStory() {
+  storyStep=0; document.getElementById('btn-reset-story').classList.add('hidden');
+  document.getElementById('story-icon').className="fa-solid fa-seedling text-6xl text-emerald-500 transition-all duration-500";
+  document.getElementById('story-text').textContent="הרוח החזקה של הר אדר נושאת אתכם מתוך אצטרובל ישן של עץ אורן ענק. למטה רואים שלושה מקומות נחיתה. לאן תרצו שהרוח תסחוף אתכם?";
+  document.getElementById('story-choices').innerHTML=`<button onclick="advanceStory(1)" class="w-full py-3 px-4 bg-white hover:bg-purple-50 text-slate-700 text-xs font-bold text-right rounded-xl border border-slate-200 transition-all flex items-center justify-between shadow-sm"><span>סחפו אותי אל קרחת יער פתוחה ומלאת שמש</span><i class="fa-solid fa-sun text-amber-400 mr-2 flex-shrink-0"></i></button><button onclick="advanceStory(2)" class="w-full py-3 px-4 bg-white hover:bg-purple-50 text-slate-700 text-xs font-bold text-right rounded-xl border border-slate-200 transition-all flex items-center justify-between shadow-sm"><span>סחפו אותי מתחת לשיח סבוך ומוצל</span><i class="fa-solid fa-leaf text-green-500 mr-2 flex-shrink-0"></i></button><button onclick="advanceStory(3)" class="w-full py-3 px-4 bg-white hover:bg-purple-50 text-slate-700 text-xs font-bold text-right rounded-xl border border-slate-200 transition-all flex items-center justify-between shadow-sm"><span>סחפו אותי אל צידו של שביל הליכה</span><i class="fa-solid fa-shoe-prints text-slate-400 mr-2 flex-shrink-0"></i></button>`;
+}
+
+// ============================================================
+// CHAT
+// ============================================================
+async function sendChatMessage() {
+  const input=document.getElementById('chat-input'), query=input.value.trim();
+  if(!query)return;
+  const msgs=document.getElementById('chat-messages');
+  const um=document.createElement('div'); um.className="flex items-start gap-2 max-w-[85%] self-end flex-row-reverse mr-auto float-up";
+  um.innerHTML=`<div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-[10px] flex-shrink-0"><i class="fa-solid fa-user text-slate-500"></i></div><div class="bg-forest-100 text-forest-900 border border-forest-200 rounded-l-xl rounded-br-xl p-2.5 leading-relaxed">${query}</div>`;
+  msgs.appendChild(um); input.value=''; msgs.scrollTop=msgs.scrollHeight;
+  const ld=document.createElement('div'); ld.id='chat-loading'; ld.className="flex items-start gap-2 max-w-[85%]";
+  ld.innerHTML=`<div class="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center text-[10px] flex-shrink-0"><i class="fa-solid fa-leaf animate-spin"></i></div><div class="bg-white border rounded-r-xl rounded-bl-xl p-2.5 shadow-sm text-slate-400 animate-pulse">מחשב... 🌿</div>`;
+  msgs.appendChild(ld); msgs.scrollTop=msgs.scrollHeight;
+  try {
+    const res=await callClaude(query,`אתה מדריך דיגיטלי אינטליגנטי בשם 'מדריך היער החכם' עבור ילדים ומשפחות שמסיירים ביער הר אדר. ענה בעברית קולחת, קצרה, עם אנרגיה של מדריך טבע. הוסף עובדות מדעיות על החורש הים-תיכוני.`);
+    ld.remove();
+    const bm=document.createElement('div'); bm.className="flex items-start gap-2 max-w-[85%] float-up";
+    bm.innerHTML=`<div class="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center text-[10px] flex-shrink-0"><i class="fa-solid fa-leaf"></i></div><div class="bg-white border rounded-r-xl rounded-bl-xl p-2.5 shadow-sm text-slate-800 leading-relaxed">${res}</div>`;
+    msgs.appendChild(bm); msgs.scrollTop=msgs.scrollHeight;
+  } catch(e) {
+    ld.remove();
+    const em=document.createElement('div'); em.className="flex items-start gap-2 max-w-[85%]";
+    em.innerHTML=`<div class="w-7 h-7 rounded-full bg-red-500 text-white flex items-center justify-center text-[10px] flex-shrink-0"><i class="fa-solid fa-exclamation"></i></div><div class="bg-red-50 border border-red-100 rounded-r-xl rounded-bl-xl p-2.5 text-red-700 text-xs">${e.message}</div>`;
+    msgs.appendChild(em); msgs.scrollTop=msgs.scrollHeight;
+  }
+}
+function sendQuickQuery(t){document.getElementById('chat-input').value=t;sendChatMessage();}
+function handleChatKeyPress(e){if(e.key==='Enter')sendChatMessage();}
+
+// ============================================================
+// MODAL & QR
+// ============================================================
+function openModal(title,msg,icon,bg,color){document.getElementById('modal-title').textContent=title;document.getElementById('modal-message').textContent=msg;document.getElementById('modal-icon-container').className=`w-12 h-12 rounded-full mx-auto flex items-center justify-center text-xl ${bg} ${color}`;document.getElementById('modal-icon').className=`fa-solid ${icon}`;document.getElementById('custom-modal').classList.remove('hidden');}
+function closeModal(){document.getElementById('custom-modal').classList.add('hidden');}
+function openQuickQRScanSimulation(){document.getElementById('qr-modal').classList.remove('hidden');}
+function closeQRModal(){document.getElementById('qr-modal').classList.add('hidden');}
+function simulateQRRead(id){closeQRModal();switchTab(id);const names={station1:"תחנה א'",station2:"תחנה ב'",'interactive-video':"תחנה ג'",station3:"תחנה ד'"};openModal("סריקת QR הצליחה! 🎉",`נפתחה הגישה ל${names[id]}!`,"fa-qrcode","bg-emerald-100","text-emerald-600");}
+
+// ============================================================
+// INIT
+// ============================================================
+window.onload=()=>{
+  const p=new URLSearchParams(window.location.search).get('tab');
+  const valid=['map','station1','station2','interactive-video','station3','ai-guide'];
+  if(p&&valid.includes(p))switchTab(p);
+  else{calculateTreeData();setTimeout(initLeafletMap,100);}
+  if('speechSynthesis' in window)window.speechSynthesis.onvoiceschanged=()=>window.speechSynthesis.getVoices();
+};
+</script>
+</body>
+</html>
